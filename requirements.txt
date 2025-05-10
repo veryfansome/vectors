@@ -1,0 +1,9 @@
+datasets
+faiss-cpu
+numpy
+openai
+pytest
+pytest-cov
+pytest-xdist
+python-dotenv
+python-multipart
