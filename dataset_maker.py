@@ -8,15 +8,15 @@ import os
 
 import vocabulary
 
-EMBEDDING_DIMS = 3072
+EMBEDDING_DIMS = 3072  # Can be reduced down to 256
 EMBEDDING_MODEL = "text-embedding-3-large"
 
 async_openai_client = AsyncOpenAI()
 logger = logging.getLogger(__name__)
 
 
-async def batch_query_faiss_index(faiss_index, id_to_labels: dict[int, str], qry_texts: list[str]):
-    results = await asyncio.gather(*[query_faiss_index(faiss_index, id_to_labels, t) for t in qry_texts])
+async def batch_query_faiss_index(faiss_index, id_to_labels: dict[int, str], qry_texts: list[str], min_sim_score: float):
+    results = await asyncio.gather(*[query_faiss_index(faiss_index, id_to_labels, t, min_sim_score) for t in qry_texts])
     return [(t, results[i]) for i, t in enumerate(qry_texts)]
 
 
@@ -50,14 +50,14 @@ async def get_text_embedding(text: str):
     return response.data[0].embedding
 
 
-async def query_faiss_index(faiss_index, id_to_labels: dict[int, str], qry_text: str):
+async def query_faiss_index(faiss_index, id_to_labels: dict[int, str], qry_text: str, min_sim_score: float):
     qry_embedding = await get_text_embedding(qry_text)
     qry_vector = np.array([qry_embedding], dtype=np.float32)
     await asyncio.to_thread(faiss.normalize_L2, qry_vector)
-    return await faiss_vector_search(faiss_index, qry_vector, id_to_labels, num_results=3, min_sim_score=0.1)
+    return await faiss_vector_search(faiss_index, qry_vector, id_to_labels, num_results=3, min_sim_score=min_sim_score)
 
 
-async def test_classification(test_ds: Dataset, cases: list[str]):
+async def test_classification(test_ds: Dataset, cases: list[str], min_sim_score: float):
     logger.info(test_ds)
     test_faiss_index = faiss.IndexIDMap(faiss.IndexFlatIP(EMBEDDING_DIMS))
     word_id_to_word: dict[int, str] = {}
@@ -70,7 +70,7 @@ async def test_classification(test_ds: Dataset, cases: list[str]):
         test_faiss_index.add_with_ids(word_vector, np.array([word_id], dtype=np.int64))
         word_id_to_word[word_id] = word
 
-    batch_results = await batch_query_faiss_index(test_faiss_index, word_id_to_word, cases)
+    batch_results = await batch_query_faiss_index(test_faiss_index, word_id_to_word, cases, min_sim_score)
     for case, results in batch_results:
         logger.info(case)
         for result in results:
@@ -90,5 +90,17 @@ if __name__ == "__main__":
         "I feel gross!",
         "I can't wait to try my new red sports car!",
         "When the hearst came for my mother, I struggled to watch her go.",
-    ]))
+        "I think that would probably work.",
+        "Hello, I need some help.",
+        "Ok, that worked.",
+        "I think you're a total waste of space.",
+        "Tell me a joke",
+        "I'm so bored! Tell me a joke",
+        "There's nothing to do around here",
+        "You're so boring!",
+        "My doctor is very experienced and will take great care of you.",
+        "I'm constantly worried that my son will injure himself the moment I look away.",
+        "I think I hurt his feeling. I feel pretty bad about it.",
+        "I broke his leg. I feel pretty bad about it.",
+    ], min_sim_score=0.20))  # Manually tweaked based on cases above.
 
