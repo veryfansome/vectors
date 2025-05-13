@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import os
 
-import vocabulary
+import labels
 
 EMBEDDING_DIMS = 3072  # Can be reduced down to 256
 EMBEDDING_MODEL = "text-embedding-3-large"
@@ -81,12 +81,9 @@ async def test_classification(test_ds: Dataset, cases: list[str], min_sim_score:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    if not os.path.exists("emotion_embeddings"):
-        emo_dict_to_save = asyncio.run(build_ds_dict(vocabulary.emotions))
-        emo_ds_to_save = Dataset.from_dict(emo_dict_to_save)
-        emo_ds_to_save.save_to_disk("emotion_embeddings")
-
-    asyncio.run(test_classification(load_from_disk("./emotion_embeddings"), [
+    test_cases = [
+        "Steph Curry's stamina is legendary and a sight to behold.",
+        "Did you see how I dunked over their forward center?",
         "I feel gross!",
         "I can't wait to try my new red sports car!",
         "When the hearst came for my mother, I struggled to watch her go.",
@@ -98,9 +95,26 @@ if __name__ == "__main__":
         "I'm so bored! Tell me a joke",
         "There's nothing to do around here",
         "You're so boring!",
-        "My doctor is very experienced and will take great care of you.",
+        "Doctor Green is very experienced and will take great care of you.",
+        "Some mechanics will take advantage of you but Bill is reliable.",
         "I'm constantly worried that my son will injure himself the moment I look away.",
         "I think I hurt his feeling. I feel pretty bad about it.",
         "I broke his leg. I feel pretty bad about it.",
-    ], min_sim_score=0.20))  # Manually tweaked based on cases above.
+    ]
+
+    if not os.path.exists("intent_embeddings"):
+        intent_dict_to_save = asyncio.run(build_ds_dict(labels.intention))
+        intent_ds_to_save = Dataset.from_dict(intent_dict_to_save)
+        intent_ds_to_save.save_to_disk("intent_embeddings")
+
+    if not os.path.exists("emotion_embeddings"):
+        emo_dict_to_save = asyncio.run(build_ds_dict(labels.emotions))
+        emo_ds_to_save = Dataset.from_dict(emo_dict_to_save)
+        emo_ds_to_save.save_to_disk("emotion_embeddings")
+
+    asyncio.run(test_classification(load_from_disk("./intent_embeddings"),
+                                    test_cases, min_sim_score=0.10))  # Manually tweaked based on cases above.
+
+    #asyncio.run(test_classification(load_from_disk("./emotion_embeddings"),
+    #                                test_cases, min_sim_score=0.10))  # Manually tweaked based on cases above.
 

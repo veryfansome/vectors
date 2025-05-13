@@ -60,3 +60,23 @@ emotions = [
     "sympathy",
     "trust",
 ]
+
+intention = [
+    "speaker agrees",
+    "speaker apologizes",
+    "speaker commands",
+    "speaker complains",
+    "speaker disagrees",
+    "speaker expresses concern",
+    "speaker expresses emotion",
+    "speaker gives compliment",
+    "speaker gives criticism",
+    #"speaker greets",
+    "speaker inquires",
+    "speaker insults",
+    "speaker makes recommendation",
+    "speaker seeks assistance",
+    "speaker seeks compliment",
+    "speaker seeks criticism",
+    "speaker seeks emotional reaction",
+]
