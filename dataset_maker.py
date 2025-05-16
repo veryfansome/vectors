@@ -6,7 +6,8 @@ import logging
 import numpy as np
 import os
 
-import labels
+import classification_labels
+import external
 
 EMBEDDING_DIMS = 3072  # Can be reduced down to 256
 EMBEDDING_MODEL = "text-embedding-3-large"
@@ -20,16 +21,21 @@ async def batch_query_faiss_index(faiss_index, id_to_labels: dict[int, str], qry
     return [(t, results[i]) for i, t in enumerate(qry_texts)]
 
 
-async def build_ds_dict(words: list[str]):
-    labels = []
+async def build_ds_dict(words: list[str], batch_size: int = 25):
+    current_batch = []
     embeddings = []
-    for word in words:
-        logger.info(f"fetching vector for {word}")
-        word_embedding = await get_text_embedding(word)
-        labels.append(word)
-        embeddings.append(word_embedding)
-    return {"word": words, "embedding": embeddings}
-
+    labels = []
+    last_word_idx = len(words) - 1
+    for word_idx, word in enumerate(words):
+        current_batch.append(word)
+        if len(current_batch) == batch_size or (word_idx == last_word_idx and current_batch):
+            # When at threshold or last word with non-empty current_batch, fetch and extend labels and embeddings
+            logger.info(f"fetching vectors for {current_batch}")
+            embedding_batch = await asyncio.gather(*[get_text_embedding(w) for w in current_batch])
+            labels.extend(current_batch)
+            embeddings.extend(embedding_batch)
+            current_batch = []  # Reset the batch after processing
+    return {"word": labels, "embedding": embeddings}
 
 async def faiss_vector_search(faiss_idx, query_vector, id_to_labels: dict[int, str], num_results: int, min_sim_score: float):
     results = []
@@ -45,7 +51,8 @@ async def get_text_embedding(text: str):
         dimensions=EMBEDDING_DIMS,
         model=EMBEDDING_MODEL,
         input=text,
-        encoding_format="float"
+        encoding_format="float",
+        timeout=60,
     )
     return response.data[0].embedding
 
@@ -66,7 +73,7 @@ async def test_classification(test_ds: Dataset, cases: list[str], min_sim_score:
         word_embedding = test_ds[word_id]['embedding']
         word_vector = np.array([word_embedding], dtype=np.float32)
         faiss.normalize_L2(word_vector)  # Important for cosine search
-        logging.info(f"indexing {word}: {word_vector}")
+        #logging.info(f"indexing {word}: {word_vector}")
         test_faiss_index.add_with_ids(word_vector, np.array([word_id], dtype=np.int64))
         word_id_to_word[word_id] = word
 
@@ -108,19 +115,27 @@ if __name__ == "__main__":
         "Have you been to Hawaii?",
     ]
 
-    if not os.path.exists("topic_embeddings"):
-        topic_dict_to_save = asyncio.run(build_ds_dict(labels.topics))
-        topic_ds_to_save = Dataset.from_dict(topic_dict_to_save)
-        topic_ds_to_save.save_to_disk("topic_embeddings")
-
     if not os.path.exists("emotion_embeddings"):
-        emo_dict_to_save = asyncio.run(build_ds_dict(labels.emotions))
+        emo_dict_to_save = asyncio.run(build_ds_dict(classification_labels.emotions))
         emo_ds_to_save = Dataset.from_dict(emo_dict_to_save)
         emo_ds_to_save.save_to_disk("emotion_embeddings")
 
-    asyncio.run(test_classification(load_from_disk("./topic_embeddings"),
-                                    test_cases, min_sim_score=0.10))
+    if not os.path.exists("topic_embeddings"):
+        topic_dict_to_save = asyncio.run(build_ds_dict(classification_labels.topics))
+        topic_ds_to_save = Dataset.from_dict(topic_dict_to_save)
+        topic_ds_to_save.save_to_disk("topic_embeddings")
+
+    #if not os.path.exists("word_embeddings"):
+    #    word_dict_to_save = asyncio.run(build_ds_dict(external.nltk_word_set))
+    #    word_ds_to_save = Dataset.from_dict(word_dict_to_save)
+    #    word_ds_to_save.save_to_disk("word_embeddings")
 
     #asyncio.run(test_classification(load_from_disk("./emotion_embeddings"),
+    #                                test_cases, min_sim_score=0.10))
+
+    #asyncio.run(test_classification(load_from_disk("./topic_embeddings"),
+    #                                test_cases, min_sim_score=0.10))
+
+    #asyncio.run(test_classification(load_from_disk("./word_embeddings"),
     #                                test_cases, min_sim_score=0.10))
 

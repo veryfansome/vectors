@@ -1,5 +1,6 @@
 datasets
 faiss-cpu
+nltk
 numpy
 openai
 pytest
